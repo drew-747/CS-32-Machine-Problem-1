@@ -4,7 +4,7 @@
 This repository contains a C implementation for performing arithmetic operations on multivariate polynomials using a linked list representation. It is designed to solve the **Machine Exercise 1 - Polynomial Operations** as a course requirement for CS 32 (24.2 WFX_MLNO) - University of the Philippines Diliman, Department of Computer Science. 
 
 ## Problem Statement
-The program implements five polynomial operations:
+The program implements five of the following polynomial operations at once:
 
 - **Addition (+)**
 - **Subtraction (-)**
