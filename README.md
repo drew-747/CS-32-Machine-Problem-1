@@ -1,7 +1,7 @@
 # Polynomial Operations Solver
 
 ## Overview
-This repository contains a C implementation for performing arithmetic operations on multivariate polynomials using a linked list representation. It is designed to solve the **Machine Exercise 1 - Polynomial Operations** for CS 32 (24.2 WFX_MLNO).
+This repository contains a C implementation for performing arithmetic operations on multivariate polynomials using a linked list representation. It is designed to solve the **Machine Exercise 1 - Polynomial Operations** as a course requirement for CS 32 (24.2 WFX_MLNO) - University of the Philippines Diliman, Department of Computer Science. 
 
 ## Problem Statement
 The program implements five polynomial operations:
@@ -53,12 +53,13 @@ It follows a **canonical ordering** of variables `(x, y, z)` using **lexicograph
 
 ## Assumptions
 - Input is always valid.
-- Coefficients fit within `float` data type.
+- Coefficients fit within the `float` data type.
 
 ## References
 - [MathPortal Polynomial Calculator](https://www.mathportal.org/calculators/polynomials-solvers/polynomials-operations-calculator.php)
 - [Wolfram Long Division](https://library.wolfram.com/webMathematica/Education/LongDivide.jsp)
 
 ## Authors
-- **Leonard Ang**
-- **Justin Chuah**
+- **Leonard Ang** (2022-01328) 
+- **Justin Chuah** (2023-00514)
+ 
