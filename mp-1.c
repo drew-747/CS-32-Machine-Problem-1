@@ -48,10 +48,6 @@ int compareExponents(int x1, int y1, int z1, int x2, int y2, int z2) {
 }
 
 void insertTerm(Polynomial *p, int ex, int ey, int ez, float c) {
-    if (fabs(c) < EPSILON) {
-        return;
-    }
-
     Term *newNode = (Term *)malloc(sizeof(Term));
     if (!newNode) {
         fprintf(stderr, "Error: Memory allocation failed in insertTerm\n");
@@ -75,14 +71,12 @@ void insertTerm(Polynomial *p, int ex, int ey, int ez, float c) {
             current->coeff += c;
             free(newNode);
 
-            if (fabs(current->coeff) < EPSILON) {
-                if (previous == NULL) {
-                    p->head = current->next;
-                } else {
-                    previous->next = current->next;
-                }
-                free(current);
+            if (previous == NULL) {
+                p->head = current->next;
+            } else {
+                previous->next = current->next;
             }
+            free(current);
             return;
         }
         previous = current;
@@ -127,10 +121,8 @@ void printPolynomial(Polynomial p) {
     int printed_term = 0;
 
     while (current != NULL) {
-        if (fabs(current->coeff) >= EPSILON) {
-             printf("%d %d %d %.4f\n", current->exp_x, current->exp_y, current->exp_z, current->coeff);
-             printed_term = 1;
-        }
+        printf("%d %d %d %.4f\n", current->exp_x, current->exp_y, current->exp_z, current->coeff);
+        printed_term = 1;
         current = current->next;
     }
 
@@ -174,24 +166,22 @@ Polynomial addPolynomial(Polynomial p1, Polynomial p2) {
             ptr2 = ptr2->next;
         }
 
-        if (fabs(newCoeff) >= EPSILON) {
-             Term *newNode = (Term *)malloc(sizeof(Term));
-             if (!newNode) {
-                 fprintf(stderr, "Oops, malloc failed in addPolynomial.\n");
-                 destroyPolynomial(&result);
-                 exit(EXIT_FAILURE);
-             }
-             newNode->exp_x = ex; newNode->exp_y = ey; newNode->exp_z = ez;
-             newNode->coeff = newCoeff;
-             newNode->next = NULL;
+        Term *newNode = (Term *)malloc(sizeof(Term));
+        if (!newNode) {
+            fprintf(stderr, "Oops, malloc failed in addPolynomial.\n");
+            destroyPolynomial(&result);
+            exit(EXIT_FAILURE);
+        }
+        newNode->exp_x = ex; newNode->exp_y = ey; newNode->exp_z = ez;
+        newNode->coeff = newCoeff;
+        newNode->next = NULL;
 
-             if (tail == NULL) {
-                 result.head = newNode;
-                 tail = newNode;
-             } else {
-                 tail->next = newNode;
-                 tail = newNode;
-             }
+        if (tail == NULL) {
+            result.head = newNode;
+            tail = newNode;
+        } else {
+            tail->next = newNode;
+            tail = newNode;
         }
     }
     return result;
