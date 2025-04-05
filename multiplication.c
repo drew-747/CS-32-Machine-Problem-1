@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdbool.h>
 
 typedef struct Term {
     int exp_x;
@@ -15,6 +16,11 @@ typedef struct {
     Term *head;
 } Polynomial;
 
+typedef struct {
+    Polynomial quotient;
+    Polynomial remainder;
+} DivisionResult;
+
 Polynomial createPolynomial();
 void destroyPolynomial(Polynomial *p);
 int compareExponents(int x1, int y1, int z1, int x2, int y2, int z2);
@@ -24,6 +30,14 @@ void printPolynomial(Polynomial p);
 Polynomial addPolynomial(Polynomial p1, Polynomial p2);
 Polynomial subtractPolynomial(Polynomial p1, Polynomial p2);
 Polynomial multiplyPolynomial(Polynomial p1, Polynomial p2);
+Polynomial dividePolynomial(Polynomial p1, Polynomial p2);
+Polynomial moduloPolynomial(Polynomial p1, Polynomial p2);
+Polynomial copyPolynomial(Polynomial p);
+Term* getLeadingTerm(Polynomial p);
+int isZeroPolynomial(Polynomial p);
+Polynomial multiplyTermByPolynomial(Term *t, Polynomial p);
+DivisionResult polyLongDivision(Polynomial A, Polynomial B);
+
 
 Polynomial createPolynomial() {
     Polynomial p;
@@ -49,8 +63,27 @@ int compareExponents(int x1, int y1, int z1, int x2, int y2, int z2) {
 }
 
 void insertTerm(Polynomial *p, int ex, int ey, int ez, float c) {
-    if (fabs(c) < 1e-9) {
+    if (c == 0.0f) {
         return;
+    }
+
+    Term **current_ptr = &(p->head);
+
+    while (*current_ptr != NULL) {
+        Term *current_node = *current_ptr;
+        int cmp = compareExponents(ex, ey, ez, current_node->exp_x, current_node->exp_y, current_node->exp_z);
+
+        if (cmp > 0) {
+            break;
+        } else if (cmp == 0) {
+            current_node->coeff += c;
+            if (current_node->coeff == 0.0f) {
+                *current_ptr = current_node->next;
+                free(current_node);
+            }
+            return;
+        }
+        current_ptr = &(current_node->next);
     }
 
     Term *newNode = (Term *)malloc(sizeof(Term));
@@ -62,41 +95,9 @@ void insertTerm(Polynomial *p, int ex, int ey, int ez, float c) {
     newNode->exp_y = ey;
     newNode->exp_z = ez;
     newNode->coeff = c;
-    newNode->next = NULL;
 
-    Term *current = p->head;
-    Term *previous = NULL;
-
-    while (current != NULL) {
-        int cmp = compareExponents(ex, ey, ez, current->exp_x, current->exp_y, current->exp_z);
-
-        if (cmp > 0) {
-            break;
-        } else if (cmp == 0) {
-            current->coeff += c;
-            free(newNode);
-
-            if (fabs(current->coeff) < 1e-9) {
-                if (previous == NULL) {
-                    p->head = current->next;
-                } else {
-                    previous->next = current->next;
-                }
-                free(current);
-            }
-            return;
-        }
-        previous = current;
-        current = current->next;
-    }
-
-    if (previous == NULL) {
-        newNode->next = p->head;
-        p->head = newNode;
-    } else {
-        newNode->next = current;
-        previous->next = newNode;
-    }
+    newNode->next = *current_ptr;
+    *current_ptr = newNode;
 }
 
 
@@ -105,21 +106,20 @@ Polynomial readPolynomial() {
     Polynomial p = createPolynomial();
 
     if (scanf("%d", &n) != 1) {
-        fprintf(stderr, "Error: Failed to read number of terms.\n");
-        exit(EXIT_FAILURE);
+         fprintf(stderr, "Error: Failed to read number of terms.\n");
+         destroyPolynomial(&p);
+         exit(EXIT_FAILURE);
     }
 
     for (int i = 0; i < n; ++i) {
         int ex, ey, ez;
         float c;
         if (scanf("%d %d %d %f", &ex, &ey, &ez, &c) != 4) {
-            fprintf(stderr, "Error: Failed to read term %d.\n", i + 1);
-            destroyPolynomial(&p);
-            exit(EXIT_FAILURE);
+             fprintf(stderr, "Error: Failed to read term %d.\n", i + 1);
+             destroyPolynomial(&p);
+             exit(EXIT_FAILURE);
         }
-        if (fabs(c) > 1e-9) {
-             insertTerm(&p, ex, ey, ez, c);
-        }
+        insertTerm(&p, ex, ey, ez, c);
     }
     return p;
 }
@@ -130,9 +130,9 @@ void printPolynomial(Polynomial p) {
     int printed_term = 0;
 
     while (current != NULL) {
-        if (fabs(current->coeff) > 1e-9) {
-             printf("%d %d %d %.4f\n", current->exp_x, current->exp_y, current->exp_z, current->coeff);
-             printed_term = 1;
+        if (current->coeff != 0.0f) {
+            printf("%d %d %d %.4f\n", current->exp_x, current->exp_y, current->exp_z, current->coeff);
+            printed_term = 1;
         }
         current = current->next;
     }
@@ -144,35 +144,117 @@ void printPolynomial(Polynomial p) {
 
 Polynomial addPolynomial(Polynomial p1, Polynomial p2) {
     Polynomial result = createPolynomial();
+    Term *tail = NULL;
     Term *ptr1 = p1.head;
     Term *ptr2 = p2.head;
 
-    while (ptr1 != NULL) {
-        insertTerm(&result, ptr1->exp_x, ptr1->exp_y, ptr1->exp_z, ptr1->coeff);
-        ptr1 = ptr1->next;
-    }
-    while (ptr2 != NULL) {
-        insertTerm(&result, ptr2->exp_x, ptr2->exp_y, ptr2->exp_z, ptr2->coeff);
-        ptr2 = ptr2->next;
-    }
+    Term dummyHead = {0, 0, 0, 0.0f, NULL};
+    tail = &dummyHead;
 
+    while (ptr1 != NULL || ptr2 != NULL) {
+        int ex = 0, ey = 0, ez = 0;
+        float newCoeff = 0.0f;
+        int cmp = 0;
+
+        if (ptr1 != NULL && ptr2 != NULL) {
+            cmp = compareExponents(ptr1->exp_x, ptr1->exp_y, ptr1->exp_z,
+                                   ptr2->exp_x, ptr2->exp_y, ptr2->exp_z);
+        } else if (ptr1 != NULL) {
+            cmp = 1;
+        } else {
+            cmp = -1;
+        }
+
+         if (cmp > 0) {
+            ex = ptr1->exp_x; ey = ptr1->exp_y; ez = ptr1->exp_z;
+            newCoeff = ptr1->coeff;
+            ptr1 = ptr1->next;
+        } else if (cmp < 0) {
+            ex = ptr2->exp_x; ey = ptr2->exp_y; ez = ptr2->exp_z;
+            newCoeff = ptr2->coeff;
+            ptr2 = ptr2->next;
+        } else {
+            ex = ptr1->exp_x; ey = ptr1->exp_y; ez = ptr1->exp_z;
+            newCoeff = ptr1->coeff + ptr2->coeff;
+            ptr1 = ptr1->next;
+            ptr2 = ptr2->next;
+        }
+
+        if (newCoeff != 0.0f) {
+            Term *newNode = (Term *)malloc(sizeof(Term));
+            if (!newNode) {
+                fprintf(stderr, "Oops, malloc failed in addPolynomial.\n");
+                result.head = dummyHead.next;
+                destroyPolynomial(&result);
+                exit(EXIT_FAILURE);
+            }
+            newNode->exp_x = ex; newNode->exp_y = ey; newNode->exp_z = ez;
+            newNode->coeff = newCoeff;
+            newNode->next = NULL;
+
+            tail->next = newNode;
+            tail = newNode;
+        }
+    }
+    result.head = dummyHead.next;
     return result;
 }
 
 Polynomial subtractPolynomial(Polynomial p1, Polynomial p2) {
     Polynomial result = createPolynomial();
+    Term *tail = NULL;
     Term *ptr1 = p1.head;
     Term *ptr2 = p2.head;
 
-    while (ptr1 != NULL) {
-        insertTerm(&result, ptr1->exp_x, ptr1->exp_y, ptr1->exp_z, ptr1->coeff);
-        ptr1 = ptr1->next;
-    }
-    while (ptr2 != NULL) {
-        insertTerm(&result, ptr2->exp_x, ptr2->exp_y, ptr2->exp_z, -ptr2->coeff);
-        ptr2 = ptr2->next;
-    }
+    Term dummyHead = {0, 0, 0, 0.0f, NULL};
+    tail = &dummyHead;
 
+    while (ptr1 != NULL || ptr2 != NULL) {
+        int ex = 0, ey = 0, ez = 0;
+        float newCoeff = 0.0f;
+        int cmp = 0;
+
+        if (ptr1 != NULL && ptr2 != NULL) {
+            cmp = compareExponents(ptr1->exp_x, ptr1->exp_y, ptr1->exp_z,
+                                   ptr2->exp_x, ptr2->exp_y, ptr2->exp_z);
+        } else if (ptr1 != NULL) {
+            cmp = 1;
+        } else {
+            cmp = -1;
+        }
+
+         if (cmp > 0) {
+            ex = ptr1->exp_x; ey = ptr1->exp_y; ez = ptr1->exp_z;
+            newCoeff = ptr1->coeff;
+            ptr1 = ptr1->next;
+        } else if (cmp < 0) {
+            ex = ptr2->exp_x; ey = ptr2->exp_y; ez = ptr2->exp_z;
+            newCoeff = -ptr2->coeff;
+            ptr2 = ptr2->next;
+        } else {
+            ex = ptr1->exp_x; ey = ptr1->exp_y; ez = ptr1->exp_z;
+            newCoeff = ptr1->coeff - ptr2->coeff;
+            ptr1 = ptr1->next;
+            ptr2 = ptr2->next;
+        }
+
+        if (newCoeff != 0.0f) {
+            Term *newNode = (Term *)malloc(sizeof(Term));
+            if (!newNode) {
+                 fprintf(stderr, "Oops, malloc failed in subtractPolynomial.\n");
+                 result.head = dummyHead.next;
+                 destroyPolynomial(&result);
+                 exit(EXIT_FAILURE);
+            }
+            newNode->exp_x = ex; newNode->exp_y = ey; newNode->exp_z = ez;
+            newNode->coeff = newCoeff;
+            newNode->next = NULL;
+
+            tail->next = newNode;
+            tail = newNode;
+        }
+    }
+    result.head = dummyHead.next;
     return result;
 }
 
@@ -183,18 +265,157 @@ Polynomial multiplyPolynomial(Polynomial p1, Polynomial p2) {
     while (ptr1 != NULL) {
         Term *ptr2 = p2.head;
         while (ptr2 != NULL) {
+            float newCoeff = ptr1->coeff * ptr2->coeff;
             int new_ex = ptr1->exp_x + ptr2->exp_x;
             int new_ey = ptr1->exp_y + ptr2->exp_y;
             int new_ez = ptr1->exp_z + ptr2->exp_z;
-            float new_coeff = ptr1->coeff * ptr2->coeff;
 
-            insertTerm(&result, new_ex, new_ey, new_ez, new_coeff);
+            insertTerm(&result, new_ex, new_ey, new_ez, newCoeff);
 
             ptr2 = ptr2->next;
         }
         ptr1 = ptr1->next;
     }
     return result;
+}
+
+Polynomial copyPolynomial(Polynomial p) {
+    Polynomial copy = createPolynomial();
+    Term *current = p.head;
+    Term *tail = NULL;
+    Term dummyHead = {0, 0, 0, 0.0f, NULL};
+    tail = &dummyHead;
+
+    while (current != NULL) {
+        Term *newNode = (Term*)malloc(sizeof(Term));
+        if (!newNode) {
+            fprintf(stderr, "Error: Memory allocation failed in copyPolynomial\n");
+            copy.head = dummyHead.next;
+            destroyPolynomial(©);
+            exit(EXIT_FAILURE);
+        }
+        newNode->exp_x = current->exp_x;
+        newNode->exp_y = current->exp_y;
+        newNode->exp_z = current->exp_z;
+        newNode->coeff = current->coeff;
+        newNode->next = NULL;
+
+        tail->next = newNode;
+        tail = newNode;
+        current = current->next;
+    }
+    copy.head = dummyHead.next;
+    return copy;
+}
+
+Term* getLeadingTerm(Polynomial p) {
+    return p.head;
+}
+
+int isZeroPolynomial(Polynomial p) {
+    return p.head == NULL;
+}
+
+Polynomial multiplyTermByPolynomial(Term *t, Polynomial p) {
+    Polynomial result = createPolynomial();
+    Term *ptr = p.head;
+    Term *tail = NULL;
+    Term dummyHead = {0, 0, 0, 0.0f, NULL};
+    tail = &dummyHead;
+
+    if (t->coeff == 0.0f) {
+        return result;
+    }
+
+    while (ptr != NULL) {
+        float newCoeff = t->coeff * ptr->coeff;
+        if (newCoeff != 0.0f) {
+            int new_ex = t->exp_x + ptr->exp_x;
+            int new_ey = t->exp_y + ptr->exp_y;
+            int new_ez = t->exp_z + ptr->exp_z;
+
+            Term *newNode = (Term*)malloc(sizeof(Term));
+            if (!newNode) {
+                fprintf(stderr, "Error: Memory allocation failed in multiplyTermByPolynomial\n");
+                result.head = dummyHead.next;
+                destroyPolynomial(&result);
+                exit(EXIT_FAILURE);
+            }
+            newNode->exp_x = new_ex;
+            newNode->exp_y = new_ey;
+            newNode->exp_z = new_ez;
+            newNode->coeff = newCoeff;
+            newNode->next = NULL;
+
+            tail->next = newNode;
+            tail = newNode;
+        }
+        ptr = ptr->next;
+    }
+    result.head = dummyHead.next;
+    return result;
+}
+
+DivisionResult polyLongDivision(Polynomial A, Polynomial B) {
+    DivisionResult res;
+    res.quotient = createPolynomial();
+    res.remainder = copyPolynomial(A);
+
+    Term *lt_B = getLeadingTerm(B);
+
+    if (isZeroPolynomial(B) || lt_B == NULL || lt_B->coeff == 0.0f) {
+        fprintf(stderr, "Warning: Division by zero polynomial or zero leading coefficient. Returning Q=0, R=A.\n");
+        destroyPolynomial(&res.quotient);
+        res.quotient = createPolynomial();
+        return res;
+    }
+
+    while (!isZeroPolynomial(res.remainder)) {
+        Term *lt_R = getLeadingTerm(res.remainder);
+        if (lt_R == NULL) break;
+
+        bool divisible = (lt_R->exp_x >= lt_B->exp_x) &&
+                         (lt_R->exp_y >= lt_B->exp_y) &&
+                         (lt_R->exp_z >= lt_B->exp_z);
+
+        if (divisible) {
+            float T_coeff = lt_R->coeff / lt_B->coeff;
+            int T_ex = lt_R->exp_x - lt_B->exp_x;
+            int T_ey = lt_R->exp_y - lt_B->exp_y;
+            int T_ez = lt_R->exp_z - lt_B->exp_z;
+
+            if (T_coeff != 0.0f) {
+                insertTerm(&res.quotient, T_ex, T_ey, T_ez, T_coeff);
+
+                Term T_term_struct = {T_ex, T_ey, T_ez, T_coeff, NULL};
+                Polynomial T_times_B = multiplyTermByPolynomial(&T_term_struct, B);
+
+                Polynomial old_R = res.remainder;
+                res.remainder = subtractPolynomial(old_R, T_times_B);
+
+                destroyPolynomial(&old_R);
+                destroyPolynomial(&T_times_B);
+            } else {
+                 break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    return res;
+}
+
+Polynomial dividePolynomial(Polynomial p1, Polynomial p2) {
+    DivisionResult dr = polyLongDivision(p1, p2);
+    destroyPolynomial(&dr.remainder);
+    return dr.quotient;
+}
+
+Polynomial moduloPolynomial(Polynomial p1, Polynomial p2) {
+    DivisionResult dr = polyLongDivision(p1, p2);
+    destroyPolynomial(&dr.quotient);
+    return dr.remainder;
 }
 
 int main() {
@@ -212,17 +433,22 @@ int main() {
                 result = addPolynomial(p1, p2);
                 processed = 1;
                 break;
-
             case '-':
                 result = subtractPolynomial(p1, p2);
                 processed = 1;
                 break;
-
             case '*':
                 result = multiplyPolynomial(p1, p2);
                 processed = 1;
                 break;
-
+            case '/':
+                result = dividePolynomial(p1, p2);
+                processed = 1;
+                break;
+            case '%':
+                result = moduloPolynomial(p1, p2);
+                processed = 1;
+                break;
             default:
                 fprintf(stderr, "Error: Invalid operation symbol '%c'.\n", op);
                 processed = 0;
@@ -236,6 +462,7 @@ int main() {
 
         destroyPolynomial(&p1);
         destroyPolynomial(&p2);
+
     }
 
     return 0;
