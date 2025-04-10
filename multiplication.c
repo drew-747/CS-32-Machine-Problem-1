@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <math.h>
+
+#define EPS 1e-6f
 
 typedef struct Term {
     int exp_x;
@@ -62,7 +65,7 @@ int compareExponents(int x1, int y1, int z1, int x2, int y2, int z2) {
 }
 
 void insertTerm(Polynomial *p, int ex, int ey, int ez, float c) {
-    if (c == 0.0f) {
+    if (fabs(c) < EPS) {
         return;
     }
     Term **current_ptr = &(p->head);
@@ -73,7 +76,7 @@ void insertTerm(Polynomial *p, int ex, int ey, int ez, float c) {
             break;
         } else if (cmp == 0) {
             current_node->coeff += c;
-            if (current_node->coeff == 0.0f) {
+            if (fabs(current_node->coeff) < EPS) {
                 *current_ptr = current_node->next;
                 free(current_node);
             }
@@ -120,7 +123,8 @@ void printPolynomial(Polynomial p) {
     Term *current = p.head;
     int printed_term = 0;
     while (current != NULL) {
-        if (current->coeff != 0.0f) {
+        if (fabs(current->coeff) >= EPS) {
+            // Print coefficient with three decimal places
             printf("%d %d %d %.3f\n", current->exp_x, current->exp_y, current->exp_z, current->coeff);
             printed_term = 1;
         }
@@ -170,7 +174,7 @@ Polynomial addPolynomial(Polynomial p1, Polynomial p2) {
             ptr1 = ptr1->next;
             ptr2 = ptr2->next;
         }
-        if (newCoeff != 0.0f) {
+        if (fabs(newCoeff) >= EPS) {
             Term *newNode = (Term *)malloc(sizeof(Term));
             if (!newNode) {
                 fprintf(stderr, "Error: malloc failed in addPolynomial.\n");
@@ -230,7 +234,7 @@ Polynomial subtractPolynomial(Polynomial p1, Polynomial p2) {
             ptr1 = ptr1->next;
             ptr2 = ptr2->next;
         }
-        if (newCoeff != 0.0f) {
+        if (fabs(newCoeff) >= EPS) {
             Term *newNode = (Term *)malloc(sizeof(Term));
             if (!newNode) {
                 fprintf(stderr, "Error: malloc failed in subtractPolynomial.\n");
@@ -303,11 +307,11 @@ Polynomial multiplyTermByPolynomial(Term *t, Polynomial p) {
     Term *tail = NULL;
     Term dummyHead = {0, 0, 0, 0.0f, NULL};
     tail = &dummyHead;
-    if (t->coeff == 0.0f)
+    if (fabs(t->coeff) < EPS)
         return result;
     for (Term *ptr = p.head; ptr != NULL; ptr = ptr->next) {
         float newCoeff = t->coeff * ptr->coeff;
-        if (newCoeff != 0.0f) {
+        if (fabs(newCoeff) >= EPS) {
             int new_ex = t->exp_x + ptr->exp_x;
             int new_ey = t->exp_y + ptr->exp_y;
             int new_ez = t->exp_z + ptr->exp_z;
@@ -336,8 +340,7 @@ DivisionResult polyLongDivision(Polynomial A, Polynomial B) {
     res.quotient = createPolynomial();
     res.remainder = copyPolynomial(A);
     Term *lt_B = getLeadingTerm(B);
-    if (isZeroPolynomial(B) || lt_B == NULL || lt_B->coeff == 0.0f) {
-        fprintf(stderr, "Warning: Division by zero polynomial or zero leading coefficient. Returning Q=0, R=A.\n");
+    if (isZeroPolynomial(B) || lt_B == NULL || fabs(lt_B->coeff) < EPS) {
         destroyPolynomial(&res.quotient);
         res.quotient = createPolynomial();
         return res;
@@ -351,20 +354,18 @@ DivisionResult polyLongDivision(Polynomial A, Polynomial B) {
                          (lt_R->exp_z >= lt_B->exp_z);
         if (divisible) {
             float T_coeff = lt_R->coeff / lt_B->coeff;
+            if (fabs(T_coeff) < EPS)
+                break;
             int T_ex = lt_R->exp_x - lt_B->exp_x;
             int T_ey = lt_R->exp_y - lt_B->exp_y;
             int T_ez = lt_R->exp_z - lt_B->exp_z;
-            if (T_coeff != 0.0f) {
-                insertTerm(&res.quotient, T_ex, T_ey, T_ez, T_coeff);
-                Term T_term_struct = {T_ex, T_ey, T_ez, T_coeff, NULL};
-                Polynomial T_times_B = multiplyTermByPolynomial(&T_term_struct, B);
-                Polynomial old_R = res.remainder;
-                res.remainder = subtractPolynomial(old_R, T_times_B);
-                destroyPolynomial(&old_R);
-                destroyPolynomial(&T_times_B);
-            } else {
-                break;
-            }
+            insertTerm(&res.quotient, T_ex, T_ey, T_ez, T_coeff);
+            Term T_term_struct = {T_ex, T_ey, T_ez, T_coeff, NULL};
+            Polynomial T_times_B = multiplyTermByPolynomial(&T_term_struct, B);
+            Polynomial old_R = res.remainder;
+            res.remainder = subtractPolynomial(old_R, T_times_B);
+            destroyPolynomial(&old_R);
+            destroyPolynomial(&T_times_B);
         } else {
             break;
         }
@@ -413,7 +414,6 @@ int main() {
                 processed = 1;
                 break;
             default:
-                fprintf(stderr, "Error: Invalid operation symbol '%c'.\n", op);
                 processed = 0;
                 break;
         }
